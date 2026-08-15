@@ -2321,7 +2321,7 @@ function analyzeFloorPlan(){
   // The server should return structured JSON:
   // {summary, property_type, unit_type, spaces, fixed_elements,
   //  opportunities, questions, confidence}
-  fetch('https://idai-copilot-qhen7os6p-wongdajin-2073s-projects.vercel.app/api/floor-plan-agent', {
+  fetch('https://idai-copilot.vercel.app/api/floor-plan-agent', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({
