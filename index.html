@@ -1831,6 +1831,76 @@ a{
   .fp-agent-actions{flex-direction:column;}
 }
 
+
+/* IDCopilot Responsive Web App */
+html{width:100%;min-width:0;overflow-x:hidden}
+body{width:100%;min-width:0;overflow-x:hidden}
+img,svg,canvas,video{max-width:100%;height:auto}
+button,input,select,textarea{max-width:100%}
+
+@media(max-width:900px){
+  .app,.shell,.page,.main,.content,.screen,.container{
+    width:100%!important;max-width:100%!important;min-width:0!important
+  }
+  .page,.content,.main{padding-left:20px!important;padding-right:20px!important}
+  .grid,.two-col,.two-column,.split,.columns,.cards-grid{
+    grid-template-columns:1fr!important
+  }
+  .flex-row,.row{flex-wrap:wrap!important}
+}
+
+@media(max-width:640px){
+  body{font-size:14px}
+  .header,header{
+    height:auto!important;min-height:72px!important;
+    padding:14px 16px!important
+  }
+  .brand{min-width:0!important;flex-wrap:wrap}
+  .brand strong{font-size:17px!important}
+  .product{font-size:14px!important}
+  .steps{width:100%;margin-top:12px!important}
+  .layout,.page,.content,.main{
+    padding:22px 16px 36px!important
+  }
+  h1{font-size:clamp(28px,8vw,34px)!important;line-height:1.08!important}
+  input,select,textarea{min-height:44px;font-size:16px!important}
+  textarea{min-height:110px}
+  .fields,.result-grid,.fp-agent-grid{grid-template-columns:1fr!important}
+  .field.full{grid-column:auto!important}
+  .actions,.button-row,.nav-actions{
+    display:flex!important;flex-direction:column!important;
+    width:100%;gap:8px!important
+  }
+  .actions .btn,.button-row .btn,.nav-actions .btn{
+    width:100%!important;min-height:44px
+  }
+  .drop,.upload-area,.floor-plan-preview{
+    width:100%!important;min-width:0!important
+  }
+  .drop{min-height:210px!important}
+  .card,.fp-agent-card,.fp-agent-kv,.kv{
+    min-width:0!important;max-width:100%!important
+  }
+  .fp-agent-head{flex-direction:column!important;align-items:flex-start!important}
+  .fp-agent-actions{flex-direction:column!important}
+  .fp-agent-actions .btn{width:100%!important}
+  .fp-agent-copy,.fp-agent-list,.agent-log,.sub{
+    overflow-wrap:anywhere;word-break:break-word
+  }
+  table{width:100%!important;max-width:100%!important}
+}
+
+@media(max-width:390px){
+  .header,header{padding-left:12px!important;padding-right:12px!important}
+  .layout,.page,.content,.main{
+    padding-left:12px!important;padding-right:12px!important
+  }
+  .brand{gap:7px!important}
+  .divider{height:19px!important}
+  .product{font-size:13px!important}
+  h1{font-size:27px!important}
+}
+
 </style>
 </head>
 <body>
@@ -3384,6 +3454,20 @@ function renderScreen(){
 // Keep all private API keys server-side.
 
 render();
+</script>
+
+
+<script>
+(function () {
+  function syncResponsiveMode() {
+    document.documentElement.dataset.viewport =
+      window.innerWidth <= 640 ? "mobile" :
+      window.innerWidth <= 900 ? "tablet" : "desktop";
+  }
+  syncResponsiveMode();
+  window.addEventListener("resize", syncResponsiveMode, {passive:true});
+  window.addEventListener("orientationchange", syncResponsiveMode, {passive:true});
+})();
 </script>
 
 </body>
