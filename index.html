@@ -1918,6 +1918,8 @@ const state = {
     floorPlanAnalysis: null,
     floorPlanAiStatus: 'idle',
     floorPlanAiError: null,
+    floorPlanEditMode: false,
+    floorPlanDraft: null,
     floorPlanImage: null,
     floorPlanFileName: '',
     calibPoints: [],
@@ -2222,9 +2224,37 @@ function toggleMemberGender(idx, value){
 function handleFloorPlanUpload(event){
   const file = event.target.files[0];
   if(!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e){
-    state.data.floorPlanImage = e.target.result;
+
+  // Real phone photos are often 3-10MB+, and base64 adds ~33% overhead on top of that —
+  // well past Vercel's hard 4.5MB serverless function body limit. Resize/compress client-side
+  // before it ever becomes a data URL, so uploads work reliably regardless of source device.
+  const img = new Image();
+  const objectUrl = URL.createObjectURL(file);
+  img.onload = function(){
+    const MAX_DIM = 1600;
+    let { width, height } = img;
+    if(width > MAX_DIM || height > MAX_DIM){
+      if(width > height){ height = Math.round(height * (MAX_DIM / width)); width = MAX_DIM; }
+      else { width = Math.round(width * (MAX_DIM / height)); height = MAX_DIM; }
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff'; // flatten transparency (e.g. PNG floor plan exports) onto white before JPEG encode
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(img, 0, 0, width, height);
+    URL.revokeObjectURL(objectUrl);
+
+    let dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+    // If still too close to the limit (e.g. a very detailed/busy plan), step quality down further.
+    let quality = 0.82;
+    while(dataUrl.length > 4.2 * 1024 * 1024 && quality > 0.4){
+      quality -= 0.1;
+      dataUrl = canvas.toDataURL('image/jpeg', quality);
+    }
+
+    state.data.floorPlanImage = dataUrl;
     state.data.floorPlanFileName = file.name;
     state.data.fileUploaded = true;
     state.data.floorPlanAnalysis = null;
@@ -2237,7 +2267,12 @@ function handleFloorPlanUpload(event){
     state.data.calibConfirmed = false;
     render();
   };
-  reader.readAsDataURL(file);
+  img.onerror = function(){
+    URL.revokeObjectURL(objectUrl);
+    state.data.floorPlanAiError = 'Could not read that image — please try a different photo or file.';
+    render();
+  };
+  img.src = objectUrl;
 }
 
 function removeFloorPlan(event){
@@ -2413,6 +2448,50 @@ function renderFloorPlanAgent(){
     `;
   }
 
+  if(d.floorPlanEditMode && d.floorPlanDraft){
+    const dr = d.floorPlanDraft;
+    return `
+      <div class="fp-agent">
+        <div class="fp-agent-card highlight">
+          <div class="fp-agent-head">
+            <div>
+              <div class="eyebrow" style="margin-bottom:4px;">Correct details</div>
+              <div class="fp-agent-title" style="font-size:17px;">Fix anything Copilot got wrong</div>
+              <div class="fp-agent-copy">Edit directly — one item per line for the lists below. Your corrections replace the AI's reading.</div>
+            </div>
+            <div class="fp-agent-badge">EDITING</div>
+          </div>
+
+          <label class="field-label" style="margin-top:10px;">Summary</label>
+          <textarea class="text-input textarea-input" oninput="setFloorPlanDraftField('summary', this.value)">${escapeHtml(dr.summary)}</textarea>
+
+          <label class="field-label">Property type</label>
+          <input class="text-input" type="text" value="${escapeHtml(dr.property_type)}" oninput="setFloorPlanDraftField('property_type', this.value)">
+
+          <label class="field-label">Unit type</label>
+          <input class="text-input" type="text" value="${escapeHtml(dr.unit_type)}" oninput="setFloorPlanDraftField('unit_type', this.value)">
+
+          <label class="field-label">Detected spaces <span style="font-weight:400; color:var(--muted);">(one per line)</span></label>
+          <textarea class="text-input textarea-input" oninput="setFloorPlanDraftField('spaces', this.value)">${escapeHtml(dr.spaces)}</textarea>
+
+          <label class="field-label">Fixed elements <span style="font-weight:400; color:var(--muted);">(one per line)</span></label>
+          <textarea class="text-input textarea-input" oninput="setFloorPlanDraftField('fixed_elements', this.value)">${escapeHtml(dr.fixed_elements)}</textarea>
+
+          <label class="field-label">Design opportunities <span style="font-weight:400; color:var(--muted);">(one per line)</span></label>
+          <textarea class="text-input textarea-input" oninput="setFloorPlanDraftField('opportunities', this.value)">${escapeHtml(dr.opportunities)}</textarea>
+
+          <label class="field-label">Needs confirmation <span style="font-weight:400; color:var(--muted);">(one per line)</span></label>
+          <textarea class="text-input textarea-input" oninput="setFloorPlanDraftField('questions', this.value)">${escapeHtml(dr.questions)}</textarea>
+
+          <div class="fp-agent-actions">
+            <button class="btn btn-secondary" onclick="cancelFloorPlanCorrection()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveFloorPlanCorrection()">Save corrections</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   const a = d.floorPlanAnalysis;
   const list = (items) => (items || []).map(x => `<li>${escapeHtml(String(x))}</li>`).join('');
   return `
@@ -2456,6 +2535,7 @@ function renderFloorPlanAgent(){
 
         ${d.floorPlanAiError ? `<div class="note" style="margin-top:10px;border-left:3px solid var(--lavender);">${escapeHtml(d.floorPlanAiError)}</div>` : ''}
 
+        <button class="btn btn-secondary" style="width:100%; margin-top:12px;" onclick="startFloorPlanCorrection()">✎ Correct details</button>
         <div class="fp-agent-actions">
           <button class="btn btn-secondary" onclick="analyzeFloorPlan()">↻ Re-analyse</button>
           <button class="btn btn-primary" onclick="confirmFloorPlanUnderstanding()">✓ Looks right</button>
@@ -2468,6 +2548,55 @@ function renderFloorPlanAgent(){
 function confirmFloorPlanUnderstanding(){
   state.data.floorPlanUnderstandingConfirmed = true;
   state.data.floorPlanAiError = null;
+  render();
+}
+
+function startFloorPlanCorrection(){
+  const a = state.data.floorPlanAnalysis;
+  if(!a) return;
+  const toLines = (arr) => (arr || []).join('\n');
+  state.data.floorPlanDraft = {
+    summary: a.summary || '',
+    property_type: a.property_type || state.data.flatSource || '',
+    unit_type: a.unit_type || state.data.unitType || '',
+    spaces: toLines(a.spaces),
+    fixed_elements: toLines(a.fixed_elements),
+    opportunities: toLines(a.opportunities),
+    questions: toLines(a.questions),
+  };
+  state.data.floorPlanEditMode = true;
+  render();
+}
+
+function cancelFloorPlanCorrection(){
+  state.data.floorPlanEditMode = false;
+  state.data.floorPlanDraft = null;
+  render();
+}
+
+function setFloorPlanDraftField(field, value){
+  if(!state.data.floorPlanDraft) return;
+  state.data.floorPlanDraft[field] = value;
+}
+
+function saveFloorPlanCorrection(){
+  const d = state.data.floorPlanDraft;
+  if(!d) return;
+  const toList = (text) => (text || '').split('\n').map(s => s.trim()).filter(Boolean);
+  state.data.floorPlanAnalysis = {
+    summary: d.summary,
+    property_type: d.property_type,
+    unit_type: d.unit_type,
+    spaces: toList(d.spaces),
+    fixed_elements: toList(d.fixed_elements),
+    opportunities: toList(d.opportunities),
+    questions: toList(d.questions),
+    confidence: 'Corrected by homeowner',
+  };
+  state.data.floorPlanAiStatus = 'corrected';
+  state.data.floorPlanAiError = null;
+  state.data.floorPlanEditMode = false;
+  state.data.floorPlanDraft = null;
   render();
 }
 
